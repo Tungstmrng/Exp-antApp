@@ -53,6 +53,16 @@ export default function TabLayout() {
           ),
         }}
       />
+      <Tabs.Screen
+        name="ledger"
+        options={{
+          title: 'Rekap Utang',
+          headerShown: false,
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="wallet-outline" size={size} color={color} />
+          ),
+        }}
+      />
     </Tabs>
   );
 }

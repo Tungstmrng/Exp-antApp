@@ -10,6 +10,12 @@ export interface TransactionItem {
   discount: number;
 }
 
+export interface SplitShare {
+  name: string;
+  amount: number;
+  isPaid: boolean;
+}
+
 export interface Transaction {
   id: string;
   merchant_name: string;
@@ -17,23 +23,23 @@ export interface Transaction {
   items: TransactionItem[];
   discounts?: { name: string; amount: number }[];
   date: string;
+  splitShares?: SplitShare[]; // <-- Data rekap patungan per orang
 }
 
 interface FinanceContextType {
   transactions: Transaction[];
   addTransaction: (transaction: Transaction) => Promise<void>;
   deleteTransaction: (id: string) => Promise<void>;
+  toggleSplitSharePaid: (transactionId: string, participantName: string) => Promise<void>;
   clearTransactions: () => Promise<void>;
 }
 
 const FinanceContext = createContext<FinanceContextType | undefined>(undefined);
-
 const STORAGE_KEY = '@smart_expense_transactions_v1';
 
 export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
 
-  // 1. Muat data tersimpan saat aplikasi pertama kali dibuka
   useEffect(() => {
     loadStoredTransactions();
   }, []);
@@ -49,7 +55,6 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
     }
   };
 
-  // 2. Simpan transaksi baru dan perbarui AsyncStorage
   const addTransaction = async (newTransaction: Transaction) => {
     try {
       const updatedTransactions = [newTransaction, ...transactions];
@@ -60,7 +65,6 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
     }
   };
 
-  // 3. Hapus transaksi berdasarkan ID
   const deleteTransaction = async (id: string) => {
     try {
       const updatedTransactions = transactions.filter((t) => t.id !== id);
@@ -71,7 +75,26 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
     }
   };
 
-  // 4. Bersihkan semua data (opsional untuk testing)
+  // Fungsi untuk mengubah status lunas/belum lunas pada rekap utang
+  const toggleSplitSharePaid = async (transactionId: string, participantName: string) => {
+    try {
+      const updatedTransactions = transactions.map((t) => {
+        if (t.id !== transactionId || !t.splitShares) return t;
+        const updatedShares = t.splitShares.map((share) => {
+          if (share.name === participantName) {
+            return { ...share, isPaid: !share.isPaid };
+          }
+          return share;
+        });
+        return { ...t, splitShares: updatedShares };
+      });
+      setTransactions(updatedTransactions);
+      await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(updatedTransactions));
+    } catch (error) {
+      console.error('Gagal mengubah status pembayaran:', error);
+    }
+  };
+
   const clearTransactions = async () => {
     try {
       setTransactions([]);
@@ -82,7 +105,7 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
   };
 
   return (
-    <FinanceContext.Provider value={{ transactions, addTransaction, deleteTransaction, clearTransactions }}>
+    <FinanceContext.Provider value={{ transactions, addTransaction, deleteTransaction, toggleSplitSharePaid, clearTransactions }}>
       {children}
     </FinanceContext.Provider>
   );

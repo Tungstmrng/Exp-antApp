@@ -331,6 +331,44 @@ export default function ScanScreen() {
       return;
     }
 
+    // Hitung rincian split shares jika split bill aktif
+    let splitSharesData: { name: string; amount: number; isPaid: boolean }[] = [];
+    if (isSplitBillActive) {
+      const rawItemsTotal = itemsTotal > 0 ? itemsTotal : 1;
+      const calculationByPerson: { [key: string]: number } = {};
+      participants.forEach((p) => {
+        calculationByPerson[p] = 0;
+      });
+
+      items.forEach((item) => {
+        const shareCount = item.assignedTo.length > 0 ? item.assignedTo.length : 1;
+        const splitPrice = item.price / shareCount;
+        item.assignedTo.forEach((p) => {
+          if (calculationByPerson[p] !== undefined) {
+            calculationByPerson[p] += splitPrice;
+          }
+        });
+      });
+
+      participants.forEach((p) => {
+        // Rekap utang khusus untuk teman (selain "Saya")
+        if (p !== 'Saya') {
+          const subtotal = calculationByPerson[p] || 0;
+          const proportion = subtotal / rawItemsTotal;
+          const personDiscountShare = discountTotal * proportion;
+          const finalAmount = Math.max(0, subtotal - personDiscountShare);
+
+          if (finalAmount > 0) {
+            splitSharesData.push({
+              name: p,
+              amount: Math.round(finalAmount),
+              isPaid: false, // Default belum bayar
+            });
+          }
+        }
+      });
+    }
+
     await addTransaction({
       id: Date.now().toString(),
       merchant_name: merchantName.trim(),
@@ -347,9 +385,10 @@ export default function ScanScreen() {
         .filter((d) => d.amount > 0)
         .map((d) => ({ name: d.name.trim() || 'Diskon', amount: d.amount })),
       date: new Date().toISOString(),
+      splitShares: splitSharesData.length > 0 ? splitSharesData : undefined,
     });
 
-    Alert.alert('Berhasil!', 'Transaksi berhasil divalidasi dan disimpan ke Dashboard.');
+    Alert.alert('Berhasil!', 'Transaksi dan rekap split bill berhasil disimpan.');
 
     setImageUri(null);
     setIsScanned(false);
