@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { StyleSheet, Text, View, TouchableOpacity, Image, ActivityIndicator, Alert, ScrollView, TextInput } from 'react-native';
+import { StyleSheet, Text, View, TouchableOpacity, Image, ActivityIndicator, Alert, ScrollView, TextInput, Share } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { useFinance } from '../../context/FinanceContext';
@@ -18,6 +18,7 @@ interface EditableItem {
   category: string;
   ocrPrice?: number; // harga asli terbaca OCR bila backend mengoreksinya otomatis
   suggestedPrice?: number; // saran koreksi harga yang tidak bisa dipastikan backend
+  assignedTo: string[]; // Partisipan yang memikul item ini
 }
 
 interface EditableDiscount {
@@ -45,6 +46,11 @@ export default function ScanScreen() {
   const [warnings, setWarnings] = useState<string[]>([]);
   const [categoryPickerKey, setCategoryPickerKey] = useState<string | null>(null);
 
+  // State untuk Fitur Split Bill & WhatsApp Share
+  const [isSplitBillActive, setIsSplitBillActive] = useState<boolean>(false);
+  const [participants, setParticipants] = useState<string[]>(['Saya']);
+  const [inputParticipant, setInputParticipant] = useState<string>('');
+
   const itemsTotal = items.reduce((sum, item) => sum + item.price, 0);
   const itemDiscountTotal = items.reduce((sum, item) => sum + item.discount, 0);
   const discountTotal = discounts.reduce((sum, d) => sum + d.amount, 0);
@@ -61,7 +67,7 @@ export default function ScanScreen() {
 
     const result = await ImagePicker.launchCameraAsync({
       mediaTypes: ['images'],
-      quality: 1, // kualitas penuh: kompresi ulang JPEG menambah salah baca OCR
+      quality: 1,
     });
 
     if (!result.canceled && result.assets && result.assets.length > 0) {
@@ -74,7 +80,7 @@ export default function ScanScreen() {
   const pickFromGallery = async () => {
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ['images'],
-      quality: 1, // kualitas penuh: kompresi ulang JPEG menambah salah baca OCR
+      quality: 1,
     });
 
     if (!result.canceled && result.assets && result.assets.length > 0) {
@@ -87,6 +93,8 @@ export default function ScanScreen() {
   const processReceipt = async (uri: string) => {
     setIsLoading(true);
     setIsScanned(false);
+    setIsSplitBillActive(false); // Reset split bill saat scan struk baru
+    setParticipants(['Saya']);
 
     try {
       const fetchResponse = await fetch(uri);
@@ -109,6 +117,8 @@ export default function ScanScreen() {
         const suggestionById = new Map<number, number>(
           (data.suggestions || []).map((sg: any) => [sg.item_id, sg.price])
         );
+        
+        const initialParticipants = ['Saya'];
         setItems(
           (data.items || []).map((item: any) => ({
             key: newKey(),
@@ -120,6 +130,7 @@ export default function ScanScreen() {
             category: item.category || DEFAULT_CATEGORY,
             ocrPrice: item.ocr_price,
             suggestedPrice: suggestionById.get(item.id),
+            assignedTo: initialParticipants, // Default di-assign ke "Saya"
           }))
         );
         setDiscounts((data.discounts || []).map((d: any) => ({ key: newKey(), name: d.name, amount: d.amount })));
@@ -143,7 +154,6 @@ export default function ScanScreen() {
     setItems((prev) => prev.map((item) => (item.key === key ? { ...item, ...changes } : item)));
   };
 
-  // Pakai saran harga; saran lain dihapus karena biasanya hanya satu yang benar.
   const applySuggestion = (key: string) => {
     setItems((prev) =>
       prev.map((item) =>
@@ -157,7 +167,16 @@ export default function ScanScreen() {
   const addItem = () => {
     setItems((prev) => [
       ...prev,
-      { key: newKey(), name: '', qty: 1, unit_price: 0, price: 0, discount: 0, category: DEFAULT_CATEGORY },
+      {
+        key: newKey(),
+        name: '',
+        qty: 1,
+        unit_price: 0,
+        price: 0,
+        discount: 0,
+        category: DEFAULT_CATEGORY,
+        assignedTo: participants,
+      },
     ]);
   };
 
@@ -178,7 +197,128 @@ export default function ScanScreen() {
     setDiscounts((prev) => prev.filter((d) => d.key !== key));
   };
 
-  // 6. Simpan transaksi final setelah diverifikasi user
+  // 6. Manajemen Partisipan Split Bill
+  const addParticipant = () => {
+    if (!inputParticipant.trim()) return;
+    const trimmedName = inputParticipant.trim();
+    if (participants.includes(trimmedName)) {
+      Alert.alert('Peringatan', 'Nama partisipan sudah ada.');
+      return;
+    }
+    const updatedParticipants = [...participants, trimmedName];
+    setParticipants(updatedParticipants);
+    setInputParticipant('');
+
+    // Opsional: Otomatis masukkan partisipan baru ke semua item
+    setItems((prev) =>
+      prev.map((item) => ({
+        ...item,
+        assignedTo: [...item.assignedTo, trimmedName],
+      }))
+    );
+  };
+
+  const removeParticipant = (name: string) => {
+    if (participants.length <= 1) {
+      Alert.alert('Peringatan', 'Minimal harus ada 1 partisipan.');
+      return;
+    }
+    setParticipants(participants.filter((p) => p !== name));
+    setItems((prev) =>
+      prev.map((item) => ({
+        ...item,
+        assignedTo: item.assignedTo.filter((p) => p !== name),
+      }))
+    );
+  };
+
+  const toggleItemParticipant = (itemKey: string, participantName: string) => {
+    setItems((prev) =>
+      prev.map((item) => {
+        if (item.key !== itemKey) return item;
+        const exists = item.assignedTo.includes(participantName);
+        let updatedAssigned: string[];
+
+        if (exists) {
+          if (item.assignedTo.length === 1) return item; // Minimal 1 orang memegang item
+          updatedAssigned = item.assignedTo.filter((p) => p !== participantName);
+        } else {
+          updatedAssigned = [...item.assignedTo, participantName];
+        }
+        return { ...item, assignedTo: updatedAssigned };
+      })
+    );
+  };
+
+  // 7. Bagikan Split Bill ke WhatsApp dengan Distribusi Diskon/Voucher Proporsional
+  const handleShareWhatsApp = async () => {
+    if (items.length === 0) {
+      Alert.alert('Peringatan', 'Belum ada item belanja untuk dibagikan.');
+      return;
+    }
+
+    // 1. Hitung subtotal mentah per partisipan berdasarkan item yang di-assign
+    const calculationByPerson: { [key: string]: { subtotal: number; details: string[] } } = {};
+    participants.forEach((p) => {
+      calculationByPerson[p] = { subtotal: 0, details: [] };
+    });
+
+    items.forEach((item) => {
+      const shareCount = item.assignedTo.length > 0 ? item.assignedTo.length : 1;
+      const splitPrice = item.price / shareCount;
+
+      item.assignedTo.forEach((p) => {
+        if (calculationByPerson[p]) {
+          calculationByPerson[p].subtotal += splitPrice;
+          const shareText = shareCount > 1 ? ` (bagi ${shareCount})` : '';
+          calculationByPerson[p].details.push(`   • ${item.name}${shareText}: ${rupiah(Math.round(splitPrice))}`);
+        }
+      });
+    });
+
+    // 2. Distribusikan diskon/voucher transaksi secara proporsional ke setiap partisipan
+    const rawItemsTotal = itemsTotal > 0 ? itemsTotal : 1; // Mencegah pembagian dengan nol
+
+    let message = `🧾 *SPLIT BILL - ${merchantName.toUpperCase() || 'Belanja'}*\n`;
+    message += `──────────────────────\n\n`;
+
+    participants.forEach((p) => {
+      const data = calculationByPerson[p];
+      
+      // Hitung proporsi belanja partisipan terhadap total item
+      const proportion = data.subtotal / rawItemsTotal;
+      const personDiscountShare = discountTotal * proportion;
+      const finalPersonTotal = Math.max(0, data.subtotal - personDiscountShare);
+
+      message += `👤 *${p}* (Total: *${rupiah(Math.round(finalPersonTotal))}*)\n`;
+      
+      if (personDiscountShare > 0) {
+        message += `   Subtotal: ${rupiah(Math.round(data.subtotal))}\n`;
+        message += `   Potongan Diskon/Voucher: -${rupiah(Math.round(personDiscountShare))}\n`;
+      }
+
+      data.details.forEach((d) => {
+        message += `${d}\n`;
+      });
+      message += `\n`;
+    });
+
+    if (discountTotal > 0) {
+      message += `Total Diskon/Voucher Toko: -${rupiah(discountTotal)}\n`;
+    }
+
+    message += `──────────────────────\n`;
+    message += `💰 *Grand Total: ${rupiah(grandTotal)}*\n\n`;
+    message += `_Dikirim via Smart Expense Tracker_`;
+
+    try {
+      const result = await Share.share({ message });
+    } catch (error: any) {
+      Alert.alert('Error', error.message);
+    }
+  };
+
+  // 8. Simpan transaksi final setelah diverifikasi user
   const handleSaveTransaction = async () => {
     if (!merchantName.trim()) {
       Alert.alert('Peringatan', 'Nama toko/merchant tidak boleh kosong.');
@@ -223,6 +363,8 @@ export default function ScanScreen() {
     setDiscounts([]);
     setReceiptTotal(null);
     setWarnings([]);
+    setIsSplitBillActive(false);
+    setParticipants(['Saya']);
   };
 
   return (
@@ -323,6 +465,29 @@ export default function ScanScreen() {
                   {item.discount > 0 ? `Diskon ${rupiah(item.discount)}` : ''}
                 </Text>
               </View>
+
+              {/* TAMPILAN PEMILIH PARTISIPAN PER ITEM (Hanya muncul jika Split Bill aktif) */}
+              {isSplitBillActive && (
+                <View style={styles.itemParticipantRow}>
+                  <Text style={styles.itemParticipantLabel}>Ditanggung:</Text>
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flex: 1 }}>
+                    {participants.map((p) => {
+                      const isSelected = item.assignedTo.includes(p);
+                      return (
+                        <TouchableOpacity
+                          key={p}
+                          style={[styles.personChip, isSelected && styles.personChipActive]}
+                          onPress={() => toggleItemParticipant(item.key, p)}
+                        >
+                          <Text style={[styles.personChipText, isSelected && styles.personChipTextActive]}>
+                            {p} {item.assignedTo.length > 1 && isSelected ? `(1/${item.assignedTo.length})` : ''}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </ScrollView>
+                </View>
+              )}
 
               {item.ocrPrice !== undefined && (
                 <Text style={styles.ocrNoteText}>
@@ -427,6 +592,59 @@ export default function ScanScreen() {
             )}
           </View>
 
+          {/* TOMBOL TOGGLE SPLIT BILL */}
+          <TouchableOpacity
+            style={[styles.toggleSplitButton, isSplitBillActive && styles.toggleSplitButtonActive]}
+            onPress={() => setIsSplitBillActive(!isSplitBillActive)}
+          >
+            <Ionicons
+              name={isSplitBillActive ? 'people' : 'people-outline'}
+              size={18}
+              color={isSplitBillActive ? '#fff' : '#2e7d32'}
+              style={{ marginRight: 6 }}
+            />
+            <Text style={[styles.toggleSplitButtonText, isSplitBillActive && styles.toggleSplitButtonTextActive]}>
+              {isSplitBillActive ? 'Tutup Fitur Split Bill' : 'Aktifkan Split Bill (Bagi Tagihan)'}
+            </Text>
+          </TouchableOpacity>
+
+          {/* BAGIAN SPLIT BILL (Hanya tampil jika aktif) */}
+          {isSplitBillActive && (
+            <View style={styles.splitBillContainer}>
+              <Text style={styles.inputLabel}>Partisipan Split Bill ({participants.length}):</Text>
+
+              <View style={styles.participantInputRow}>
+                <TextInput
+                  style={[styles.merchantInput, { flex: 1, marginRight: 8, marginTop: 0 }]}
+                  value={inputParticipant}
+                  onChangeText={setInputParticipant}
+                  placeholder="Nama teman (cth: Budi)"
+                />
+                <TouchableOpacity style={styles.addParticipantButton} onPress={addParticipant}>
+                  <Text style={styles.addParticipantButtonText}>Tambah</Text>
+                </TouchableOpacity>
+              </View>
+
+              <View style={styles.participantChipsContainer}>
+                {participants.map((p) => (
+                  <View key={p} style={styles.participantChip}>
+                    <Text style={styles.participantChipText}>{p}</Text>
+                    {participants.length > 1 && (
+                      <TouchableOpacity onPress={() => removeParticipant(p)} style={{ marginLeft: 6 }}>
+                        <Ionicons name="close-circle" size={14} color="#d32f2f" />
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                ))}
+              </View>
+
+              <TouchableOpacity style={styles.whatsappButton} onPress={handleShareWhatsApp}>
+                <Ionicons name="logo-whatsapp" size={20} color="#fff" style={{ marginRight: 6 }} />
+                <Text style={styles.whatsappButtonText}>Bagikan Split Bill ke WhatsApp</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
           {/* Tombol Simpan */}
           <TouchableOpacity style={styles.saveButton} onPress={handleSaveTransaction}>
             <Ionicons name="checkmark-circle-outline" size={20} color="#fff" style={{ marginRight: 6 }} />
@@ -487,6 +705,124 @@ const styles = StyleSheet.create({
   totalValue: { fontSize: 16, fontWeight: 'bold', color: '#2e7d32' },
   receiptTotalText: { fontSize: 11, color: '#2e7d32', marginTop: 4, textAlign: 'right' },
   receiptTotalMismatch: { color: '#e65100' },
+  
+  // Style Split Bill & Toggle
+  toggleSplitButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1.5,
+    borderColor: '#2e7d32',
+    borderRadius: 10,
+    padding: 12,
+    marginTop: 16,
+    backgroundColor: '#fff',
+  },
+  toggleSplitButtonActive: {
+    backgroundColor: '#2e7d32',
+  },
+  toggleSplitButtonText: {
+    color: '#2e7d32',
+    fontWeight: 'bold',
+    fontSize: 13,
+  },
+  toggleSplitButtonTextActive: {
+    color: '#fff',
+  },
+  splitBillContainer: {
+    marginTop: 12,
+    backgroundColor: '#f1f8e9',
+    padding: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#c8e6c9',
+  },
+  participantInputRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+    marginTop: 4,
+  },
+  addParticipantButton: {
+    backgroundColor: '#1976d2',
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+    borderRadius: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  addParticipantButtonText: {
+    color: '#fff',
+    fontWeight: '600',
+    fontSize: 12,
+  },
+  participantChipsContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    marginBottom: 12,
+  },
+  participantChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#e3f2fd',
+    borderRadius: 16,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    marginRight: 6,
+    marginBottom: 6,
+    borderWidth: 1,
+    borderColor: '#bbdefb',
+  },
+  participantChipText: {
+    fontSize: 12,
+    color: '#0d47a1',
+    fontWeight: '500',
+  },
+  whatsappButton: {
+    backgroundColor: '#25D366',
+    flexDirection: 'row',
+    padding: 12,
+    borderRadius: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  whatsappButtonText: {
+    color: '#fff',
+    fontWeight: 'bold',
+    fontSize: 13,
+  },
+  itemParticipantRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 6,
+    borderTopWidth: 1,
+    borderTopColor: '#eee',
+    paddingTop: 6,
+  },
+  itemParticipantLabel: {
+    fontSize: 11,
+    color: '#666',
+    marginRight: 6,
+    fontWeight: '600',
+  },
+  personChip: {
+    backgroundColor: '#e0e0e0',
+    borderRadius: 12,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    marginRight: 4,
+  },
+  personChipActive: {
+    backgroundColor: '#2e7d32',
+  },
+  personChipText: {
+    fontSize: 10,
+    color: '#333',
+  },
+  personChipTextActive: {
+    color: '#fff',
+    fontWeight: 'bold',
+  },
   saveButton: { backgroundColor: '#2e7d32', flexDirection: 'row', padding: 14, borderRadius: 10, justifyContent: 'center', alignItems: 'center', marginTop: 16 },
   saveButtonText: { color: '#fff', fontWeight: 'bold', fontSize: 14 },
 });
