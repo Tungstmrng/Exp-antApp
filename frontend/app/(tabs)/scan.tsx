@@ -4,6 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { useFinance } from '../../context/FinanceContext';
 import { CATEGORIES, DEFAULT_CATEGORY } from '../../constants/Categories';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 // Atur lewat file frontend/.env (lihat .env.example)
 const BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL || 'http://192.168.110.12:5000';
@@ -93,7 +94,7 @@ export default function ScanScreen() {
   const processReceipt = async (uri: string) => {
     setIsLoading(true);
     setIsScanned(false);
-    setIsSplitBillActive(false); // Reset split bill saat scan struk baru
+    setIsSplitBillActive(false);
     setParticipants(['Saya']);
 
     try {
@@ -130,7 +131,7 @@ export default function ScanScreen() {
             category: item.category || DEFAULT_CATEGORY,
             ocrPrice: item.ocr_price,
             suggestedPrice: suggestionById.get(item.id),
-            assignedTo: initialParticipants, // Default di-assign ke "Saya"
+            assignedTo: initialParticipants,
           }))
         );
         setDiscounts((data.discounts || []).map((d: any) => ({ key: newKey(), name: d.name, amount: d.amount })));
@@ -209,7 +210,6 @@ export default function ScanScreen() {
     setParticipants(updatedParticipants);
     setInputParticipant('');
 
-    // Opsional: Otomatis masukkan partisipan baru ke semua item
     setItems((prev) =>
       prev.map((item) => ({
         ...item,
@@ -240,7 +240,7 @@ export default function ScanScreen() {
         let updatedAssigned: string[];
 
         if (exists) {
-          if (item.assignedTo.length === 1) return item; // Minimal 1 orang memegang item
+          if (item.assignedTo.length === 1) return item;
           updatedAssigned = item.assignedTo.filter((p) => p !== participantName);
         } else {
           updatedAssigned = [...item.assignedTo, participantName];
@@ -250,14 +250,13 @@ export default function ScanScreen() {
     );
   };
 
-  // 7. Bagikan Split Bill ke WhatsApp dengan Distribusi Diskon/Voucher Proporsional
+  // 7. Bagikan Split Bill ke WhatsApp
   const handleShareWhatsApp = async () => {
     if (items.length === 0) {
       Alert.alert('Peringatan', 'Belum ada item belanja untuk dibagikan.');
       return;
     }
 
-    // 1. Hitung subtotal mentah per partisipan berdasarkan item yang di-assign
     const calculationByPerson: { [key: string]: { subtotal: number; details: string[] } } = {};
     participants.forEach((p) => {
       calculationByPerson[p] = { subtotal: 0, details: [] };
@@ -276,16 +275,13 @@ export default function ScanScreen() {
       });
     });
 
-    // 2. Distribusikan diskon/voucher transaksi secara proporsional ke setiap partisipan
-    const rawItemsTotal = itemsTotal > 0 ? itemsTotal : 1; // Mencegah pembagian dengan nol
+    const rawItemsTotal = itemsTotal > 0 ? itemsTotal : 1;
 
     let message = `🧾 *SPLIT BILL - ${merchantName.toUpperCase() || 'Belanja'}*\n`;
     message += `──────────────────────\n\n`;
 
     participants.forEach((p) => {
       const data = calculationByPerson[p];
-      
-      // Hitung proporsi belanja partisipan terhadap total item
       const proportion = data.subtotal / rawItemsTotal;
       const personDiscountShare = discountTotal * proportion;
       const finalPersonTotal = Math.max(0, data.subtotal - personDiscountShare);
@@ -312,7 +308,7 @@ export default function ScanScreen() {
     message += `_Dikirim via Smart Expense Tracker_`;
 
     try {
-      const result = await Share.share({ message });
+      await Share.share({ message });
     } catch (error: any) {
       Alert.alert('Error', error.message);
     }
@@ -355,7 +351,6 @@ export default function ScanScreen() {
 
     Alert.alert('Berhasil!', 'Transaksi berhasil divalidasi dan disimpan ke Dashboard.');
 
-    // Reset form
     setImageUri(null);
     setIsScanned(false);
     setMerchantName('');
@@ -368,9 +363,9 @@ export default function ScanScreen() {
   };
 
   return (
-    <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
-      <View style={styles.headerContainer}>
-        <Ionicons name="scan-circle-outline" size={56} color="#2e7d32" />
+    <SafeAreaView style={styles.safeArea} edges={['top']}>
+    <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled"><View style={styles.headerContainer}>
+        <Ionicons name="scan-circle-outline" size={56} color="#FF7043" />
         <Text style={styles.title}>Scan & Validasi Struk</Text>
         <Text style={styles.subtitle}>
           Foto struk, periksa hasil pembacaan OCR, lalu edit manual jika ada kesalahan sebelum disimpan.
@@ -397,7 +392,7 @@ export default function ScanScreen() {
 
       {isLoading && (
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#2e7d32" />
+          <ActivityIndicator size="large" color="#FF7043" />
           <Text style={styles.loadingText}>Memproses OCR & Analisis Struk...</Text>
         </View>
       )}
@@ -408,7 +403,7 @@ export default function ScanScreen() {
 
           {warnings.map((warning, index) => (
             <View key={index} style={styles.warningBox}>
-              <Ionicons name="warning-outline" size={16} color="#e65100" style={{ marginRight: 6 }} />
+              <Ionicons name="warning-outline" size={16} color="#F59E0B" style={{ marginRight: 6 }} />
               <Text style={styles.warningText}>{warning}</Text>
             </View>
           ))}
@@ -419,6 +414,7 @@ export default function ScanScreen() {
             value={merchantName}
             onChangeText={setMerchantName}
             placeholder="Masukkan nama toko"
+            placeholderTextColor="#6B7280"
           />
 
           <Text style={styles.inputLabel}>Daftar Item Belanja ({items.length}):</Text>
@@ -432,6 +428,7 @@ export default function ScanScreen() {
                     value={item.name}
                     onChangeText={(val) => updateItem(item.key, { name: val })}
                     placeholder="Nama barang"
+                    placeholderTextColor="#6B7280"
                   />
                 </View>
 
@@ -442,11 +439,12 @@ export default function ScanScreen() {
                     keyboardType="numeric"
                     onChangeText={(val) => updateItem(item.key, { price: toNumber(val), ocrPrice: undefined })}
                     placeholder="Harga"
+                    placeholderTextColor="#6B7280"
                   />
                 </View>
 
                 <TouchableOpacity onPress={() => deleteItem(item.key)} style={styles.deleteButton}>
-                  <Ionicons name="trash-outline" size={20} color="#d32f2f" />
+                  <Ionicons name="trash-outline" size={20} color="#FF7043" />
                 </TouchableOpacity>
               </View>
 
@@ -456,7 +454,7 @@ export default function ScanScreen() {
                   onPress={() => setCategoryPickerKey(categoryPickerKey === item.key ? null : item.key)}
                 >
                   <Text style={styles.categoryBadgeText}>{item.category}</Text>
-                  <Ionicons name="chevron-down" size={12} color="#2e7d32" style={{ marginLeft: 2 }} />
+                  <Ionicons name="chevron-down" size={12} color="#FF7043" style={{ marginLeft: 2 }} />
                 </TouchableOpacity>
 
                 <Text style={styles.itemMetaText}>
@@ -466,7 +464,6 @@ export default function ScanScreen() {
                 </Text>
               </View>
 
-              {/* TAMPILAN PEMILIH PARTISIPAN PER ITEM (Hanya muncul jika Split Bill aktif) */}
               {isSplitBillActive && (
                 <View style={styles.itemParticipantRow}>
                   <Text style={styles.itemParticipantLabel}>Ditanggung:</Text>
@@ -497,7 +494,7 @@ export default function ScanScreen() {
 
               {item.suggestedPrice !== undefined && (
                 <TouchableOpacity style={styles.suggestionChip} onPress={() => applySuggestion(item.key)}>
-                  <Ionicons name="bulb-outline" size={14} color="#e65100" style={{ marginRight: 4 }} />
+                  <Ionicons name="bulb-outline" size={14} color="#F59E0B" style={{ marginRight: 4 }} />
                   <Text style={styles.suggestionText}>
                     Mungkin {rupiah(item.suggestedPrice)}? Ketuk untuk pakai
                   </Text>
@@ -528,7 +525,7 @@ export default function ScanScreen() {
           ))}
 
           <TouchableOpacity style={styles.addButton} onPress={addItem}>
-            <Ionicons name="add-circle-outline" size={18} color="#2e7d32" style={{ marginRight: 4 }} />
+            <Ionicons name="add-circle-outline" size={18} color="#FF7043" style={{ marginRight: 4 }} />
             <Text style={styles.addButtonText}>Tambah Item</Text>
           </TouchableOpacity>
 
@@ -543,27 +540,29 @@ export default function ScanScreen() {
                   value={discount.name}
                   onChangeText={(val) => updateDiscount(discount.key, { name: val })}
                   placeholder="Nama diskon / voucher"
+                  placeholderTextColor="#6B7280"
                 />
               </View>
 
               <View style={{ flex: 1.2, marginRight: 6 }}>
                 <TextInput
-                  style={[styles.itemPriceInput, { color: '#d32f2f' }]}
+                  style={[styles.itemPriceInput, { color: '#FF7043' }]}
                   value={discount.amount.toString()}
                   keyboardType="numeric"
                   onChangeText={(val) => updateDiscount(discount.key, { amount: toNumber(val) })}
                   placeholder="Potongan"
+                  placeholderTextColor="#6B7280"
                 />
               </View>
 
               <TouchableOpacity onPress={() => deleteDiscount(discount.key)} style={styles.deleteButton}>
-                <Ionicons name="trash-outline" size={20} color="#d32f2f" />
+                <Ionicons name="trash-outline" size={20} color="#FF7043" />
               </TouchableOpacity>
             </View>
           ))}
 
           <TouchableOpacity style={styles.addButton} onPress={addDiscount}>
-            <Ionicons name="pricetag-outline" size={18} color="#2e7d32" style={{ marginRight: 4 }} />
+            <Ionicons name="pricetag-outline" size={18} color="#FF7043" style={{ marginRight: 4 }} />
             <Text style={styles.addButtonText}>Tambah Diskon / Voucher</Text>
           </TouchableOpacity>
 
@@ -578,7 +577,7 @@ export default function ScanScreen() {
             )}
             <View style={styles.summaryRow}>
               <Text style={styles.summaryLabel}>Diskon / Voucher</Text>
-              <Text style={[styles.summaryValue, { color: '#d32f2f' }]}>- {rupiah(discountTotal)}</Text>
+              <Text style={[styles.summaryValue, { color: '#FF7043' }]}>- {rupiah(discountTotal)}</Text>
             </View>
             <View style={styles.totalRow}>
               <Text style={styles.totalLabel}>Total Bayar:</Text>
@@ -600,7 +599,7 @@ export default function ScanScreen() {
             <Ionicons
               name={isSplitBillActive ? 'people' : 'people-outline'}
               size={18}
-              color={isSplitBillActive ? '#fff' : '#2e7d32'}
+              color={isSplitBillActive ? '#fff' : '#FF7043'}
               style={{ marginRight: 6 }}
             />
             <Text style={[styles.toggleSplitButtonText, isSplitBillActive && styles.toggleSplitButtonTextActive]}>
@@ -608,7 +607,7 @@ export default function ScanScreen() {
             </Text>
           </TouchableOpacity>
 
-          {/* BAGIAN SPLIT BILL (Hanya tampil jika aktif) */}
+          {/* BAGIAN SPLIT BILL */}
           {isSplitBillActive && (
             <View style={styles.splitBillContainer}>
               <Text style={styles.inputLabel}>Partisipan Split Bill ({participants.length}):</Text>
@@ -619,6 +618,7 @@ export default function ScanScreen() {
                   value={inputParticipant}
                   onChangeText={setInputParticipant}
                   placeholder="Nama teman (cth: Budi)"
+                  placeholderTextColor="#6B7280"
                 />
                 <TouchableOpacity style={styles.addParticipantButton} onPress={addParticipant}>
                   <Text style={styles.addParticipantButtonText}>Tambah</Text>
@@ -631,7 +631,7 @@ export default function ScanScreen() {
                     <Text style={styles.participantChipText}>{p}</Text>
                     {participants.length > 1 && (
                       <TouchableOpacity onPress={() => removeParticipant(p)} style={{ marginLeft: 6 }}>
-                        <Ionicons name="close-circle" size={14} color="#d32f2f" />
+                        <Ionicons name="close-circle" size={14} color="#FF7043" />
                       </TouchableOpacity>
                     )}
                   </View>
@@ -653,76 +653,78 @@ export default function ScanScreen() {
         </View>
       )}
     </ScrollView>
+  </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { padding: 16, backgroundColor: '#f5f6fa', flexGrow: 1 },
+  container: { padding: 16, backgroundColor: '#1A1A1A', flexGrow: 1 },
   headerContainer: { alignItems: 'center', marginBottom: 16, marginTop: 10 },
-  title: { fontSize: 20, fontWeight: 'bold', color: '#333', marginTop: 6 },
-  subtitle: { fontSize: 12, color: '#666', textAlign: 'center', paddingHorizontal: 16, marginTop: 4 },
+  title: { fontSize: 20, fontWeight: 'bold', color: '#F3F4F6', marginTop: 6 },
+  subtitle: { fontSize: 12, color: '#9CA3AF', textAlign: 'center', paddingHorizontal: 16, marginTop: 4 },
   buttonRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 14 },
-  actionButton: { flex: 1, backgroundColor: '#2e7d32', flexDirection: 'row', padding: 12, borderRadius: 10, justifyContent: 'center', alignItems: 'center', marginHorizontal: 4 },
-  galleryButton: { backgroundColor: '#1976d2' },
+  actionButton: { flex: 1, backgroundColor: '#FF7043', flexDirection: 'row', padding: 12, borderRadius: 10, justifyContent: 'center', alignItems: 'center', marginHorizontal: 4 },
+  galleryButton: { backgroundColor: '#3B82F6' },
   buttonText: { color: '#fff', fontWeight: 'bold', fontSize: 13 },
   previewContainer: { alignItems: 'center', marginBottom: 14 },
-  previewImage: { width: '100%', height: 160, borderRadius: 10, resizeMode: 'contain', backgroundColor: '#ddd' },
+  previewImage: { width: '100%', height: 160, borderRadius: 10, resizeMode: 'contain', backgroundColor: '#2A2A2A' },
   loadingContainer: { alignItems: 'center', marginVertical: 20 },
-  loadingText: { marginTop: 8, color: '#555', fontSize: 13 },
-  resultCard: { backgroundColor: '#fff', borderRadius: 12, padding: 16, elevation: 2, marginBottom: 20 },
-  sectionHeaderTitle: { fontSize: 16, fontWeight: 'bold', color: '#2e7d32', marginBottom: 12, borderBottomWidth: 1, borderBottomColor: '#eee', paddingBottom: 6 },
-  warningBox: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff3e0', borderRadius: 8, padding: 8, marginBottom: 8 },
-  warningText: { flex: 1, fontSize: 12, color: '#e65100' },
-  inputLabel: { fontSize: 12, fontWeight: '600', color: '#555', marginBottom: 4, marginTop: 8 },
-  merchantInput: { borderWidth: 1, borderColor: '#ddd', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 8, fontSize: 14, backgroundColor: '#fafafa', color: '#333' },
-  itemCard: { backgroundColor: '#f9f9f9', padding: 8, borderRadius: 8, marginBottom: 8, borderWidth: 1, borderColor: '#eee' },
+  loadingText: { marginTop: 8, color: '#9CA3AF', fontSize: 13 },
+  resultCard: { backgroundColor: '#242424', borderRadius: 12, padding: 16, borderWidth: 1, borderColor: '#333333', marginBottom: 20 },
+  sectionHeaderTitle: { fontSize: 16, fontWeight: 'bold', color: '#FF7043', marginBottom: 12, borderBottomWidth: 1, borderBottomColor: '#333333', paddingBottom: 6 },
+  warningBox: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#32261A', borderRadius: 8, padding: 8, marginBottom: 8, borderWidth: 1, borderColor: '#4A351F' },
+  warningText: { flex: 1, fontSize: 12, color: '#F59E0B' },
+  inputLabel: { fontSize: 12, fontWeight: '600', color: '#9CA3AF', marginBottom: 4, marginTop: 8 },
+  merchantInput: { borderWidth: 1, borderColor: '#3D3D3D', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 8, fontSize: 14, backgroundColor: '#1F1F1F', color: '#F3F4F6' },
+  itemCard: { backgroundColor: '#1F1F1F', padding: 8, borderRadius: 8, marginBottom: 8, borderWidth: 1, borderColor: '#333333' },
   itemEditRow: { flexDirection: 'row', alignItems: 'center' },
-  discountRow: { backgroundColor: '#fff5f5', padding: 8, borderRadius: 8, marginBottom: 8, borderWidth: 1, borderColor: '#fde0e0' },
-  itemNameInput: { borderWidth: 1, borderColor: '#ddd', borderRadius: 6, paddingHorizontal: 8, paddingVertical: 4, fontSize: 13, backgroundColor: '#fff', color: '#333' },
-  itemPriceInput: { borderWidth: 1, borderColor: '#ddd', borderRadius: 6, paddingHorizontal: 8, paddingVertical: 6, fontSize: 13, backgroundColor: '#fff', color: '#333', textAlign: 'right' },
+  discountRow: { backgroundColor: '#2A1F1F', padding: 8, borderRadius: 8, marginBottom: 8, borderWidth: 1, borderColor: '#422828' },
+  itemNameInput: { borderWidth: 1, borderColor: '#3D3D3D', borderRadius: 6, paddingHorizontal: 8, paddingVertical: 4, fontSize: 13, backgroundColor: '#242424', color: '#F3F4F6' },
+  itemPriceInput: { borderWidth: 1, borderColor: '#3D3D3D', borderRadius: 6, paddingHorizontal: 8, paddingVertical: 6, fontSize: 13, backgroundColor: '#242424', color: '#F3F4F6', textAlign: 'right' },
   deleteButton: { padding: 6, justifyContent: 'center', alignItems: 'center' },
   itemMetaRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 6 },
-  itemMetaText: { fontSize: 11, color: '#777', flexShrink: 1, textAlign: 'right' },
-  ocrNoteText: { fontSize: 11, color: '#e65100', marginTop: 4 },
-  suggestionChip: { flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start', backgroundColor: '#fff3e0', borderRadius: 12, paddingHorizontal: 8, paddingVertical: 4, marginTop: 6 },
-  suggestionText: { fontSize: 11, color: '#e65100', fontWeight: '600' },
-  categoryBadge: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#e8f5e9', borderRadius: 12, paddingHorizontal: 8, paddingVertical: 3, marginRight: 6 },
-  categoryBadgeText: { fontSize: 11, color: '#2e7d32', fontWeight: '600' },
+  itemMetaText: { fontSize: 11, color: '#9CA3AF', flexShrink: 1, textAlign: 'right' },
+  ocrNoteText: { fontSize: 11, color: '#F59E0B', marginTop: 4 },
+  suggestionChip: { flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start', backgroundColor: '#32261A', borderRadius: 12, paddingHorizontal: 8, paddingVertical: 4, marginTop: 6, borderWidth: 1, borderColor: '#4A351F' },
+  suggestionText: { fontSize: 11, color: '#F59E0B', fontWeight: '600' },
+  categoryBadge: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#1E2922', borderRadius: 12, paddingHorizontal: 8, paddingVertical: 3, marginRight: 6, borderWidth: 1, borderColor: '#2B4233' },
+  categoryBadgeText: { fontSize: 11, color: '#4ADE80', fontWeight: '600' },
   categoryPicker: { flexDirection: 'row', flexWrap: 'wrap', marginTop: 8 },
-  categoryOption: { borderWidth: 1, borderColor: '#c8e6c9', borderRadius: 12, paddingHorizontal: 8, paddingVertical: 4, marginRight: 6, marginBottom: 6, backgroundColor: '#fff' },
-  categoryOptionActive: { backgroundColor: '#2e7d32', borderColor: '#2e7d32' },
-  categoryOptionText: { fontSize: 11, color: '#2e7d32' },
+  categoryOption: { borderWidth: 1, borderColor: '#2B4233', borderRadius: 12, paddingHorizontal: 8, paddingVertical: 4, marginRight: 6, marginBottom: 6, backgroundColor: '#1F1F1F' },
+  categoryOptionActive: { backgroundColor: '#2E7D32', borderColor: '#2E7D32' },
+  categoryOptionText: { fontSize: 11, color: '#4ADE80' },
   categoryOptionTextActive: { color: '#fff', fontWeight: '600' },
-  addButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderStyle: 'dashed', borderColor: '#a5d6a7', borderRadius: 8, padding: 8, marginBottom: 4 },
-  addButtonText: { color: '#2e7d32', fontSize: 13, fontWeight: '600' },
-  summaryBox: { marginTop: 12, borderTopWidth: 1, borderTopColor: '#eee', paddingTop: 10 },
+  addButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderStyle: 'dashed', borderColor: '#4B5563', borderRadius: 8, padding: 8, marginBottom: 4, backgroundColor: '#1F1F1F' },
+  addButtonText: { color: '#9CA3AF', fontSize: 13, fontWeight: '600' },
+  summaryBox: { marginTop: 12, borderTopWidth: 1, borderTopColor: '#333333', paddingTop: 10 },
   summaryRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 },
-  summaryLabel: { fontSize: 13, color: '#555' },
-  summaryValue: { fontSize: 13, color: '#333', fontWeight: '600' },
-  summaryNote: { fontSize: 11, color: '#777', marginBottom: 4 },
-  totalRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 6, borderTopWidth: 1, borderTopColor: '#eee', paddingTop: 8 },
-  totalLabel: { fontSize: 14, fontWeight: 'bold', color: '#333' },
-  totalValue: { fontSize: 16, fontWeight: 'bold', color: '#2e7d32' },
-  receiptTotalText: { fontSize: 11, color: '#2e7d32', marginTop: 4, textAlign: 'right' },
-  receiptTotalMismatch: { color: '#e65100' },
+  summaryLabel: { fontSize: 13, color: '#9CA3AF' },
+  summaryValue: { fontSize: 13, color: '#F3F4F6', fontWeight: '600' },
+  summaryNote: { fontSize: 11, color: '#6B7280', marginBottom: 4 },
+  totalRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 6, borderTopWidth: 1, borderTopColor: '#333333', paddingTop: 8 },
+  totalLabel: { fontSize: 14, fontWeight: 'bold', color: '#F3F4F6' },
+  totalValue: { fontSize: 16, fontWeight: 'bold', color: '#FF7043' },
+  receiptTotalText: { fontSize: 11, color: '#4ADE80', marginTop: 4, textAlign: 'right' },
+  receiptTotalMismatch: { color: '#F59E0B' },
+  safeArea: { flex: 1, backgroundColor: '#1A1A1A' },
   
-  // Style Split Bill & Toggle
+  // Style Split Bill & Toggle dalam mode Night Ant
   toggleSplitButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1.5,
-    borderColor: '#2e7d32',
+    borderColor: '#FF7043',
     borderRadius: 10,
     padding: 12,
     marginTop: 16,
-    backgroundColor: '#fff',
+    backgroundColor: '#1F1F1F',
   },
   toggleSplitButtonActive: {
-    backgroundColor: '#2e7d32',
+    backgroundColor: '#FF7043',
   },
   toggleSplitButtonText: {
-    color: '#2e7d32',
+    color: '#FF7043',
     fontWeight: 'bold',
     fontSize: 13,
   },
@@ -731,11 +733,11 @@ const styles = StyleSheet.create({
   },
   splitBillContainer: {
     marginTop: 12,
-    backgroundColor: '#f1f8e9',
+    backgroundColor: '#1F1F1F',
     padding: 12,
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: '#c8e6c9',
+    borderColor: '#333333',
   },
   participantInputRow: {
     flexDirection: 'row',
@@ -744,7 +746,7 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   addParticipantButton: {
-    backgroundColor: '#1976d2',
+    backgroundColor: '#3B82F6',
     paddingHorizontal: 14,
     paddingVertical: 9,
     borderRadius: 8,
@@ -764,18 +766,18 @@ const styles = StyleSheet.create({
   participantChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#e3f2fd',
+    backgroundColor: '#1E3A8A',
     borderRadius: 16,
     paddingHorizontal: 10,
     paddingVertical: 5,
     marginRight: 6,
     marginBottom: 6,
     borderWidth: 1,
-    borderColor: '#bbdefb',
+    borderColor: '#2563EB',
   },
   participantChipText: {
     fontSize: 12,
-    color: '#0d47a1',
+    color: '#93C5FD',
     fontWeight: '500',
   },
   whatsappButton: {
@@ -796,33 +798,33 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginTop: 6,
     borderTopWidth: 1,
-    borderTopColor: '#eee',
+    borderTopColor: '#333333',
     paddingTop: 6,
   },
   itemParticipantLabel: {
     fontSize: 11,
-    color: '#666',
+    color: '#9CA3AF',
     marginRight: 6,
     fontWeight: '600',
   },
   personChip: {
-    backgroundColor: '#e0e0e0',
+    backgroundColor: '#333333',
     borderRadius: 12,
     paddingHorizontal: 8,
     paddingVertical: 3,
     marginRight: 4,
   },
   personChipActive: {
-    backgroundColor: '#2e7d32',
+    backgroundColor: '#FF7043',
   },
   personChipText: {
     fontSize: 10,
-    color: '#333',
+    color: '#D1D5DB',
   },
   personChipTextActive: {
     color: '#fff',
     fontWeight: 'bold',
   },
-  saveButton: { backgroundColor: '#2e7d32', flexDirection: 'row', padding: 14, borderRadius: 10, justifyContent: 'center', alignItems: 'center', marginTop: 16 },
+  saveButton: { backgroundColor: '#FF7043', flexDirection: 'row', padding: 14, borderRadius: 10, justifyContent: 'center', alignItems: 'center', marginTop: 16 },
   saveButtonText: { color: '#fff', fontWeight: 'bold', fontSize: 14 },
 });

@@ -3,11 +3,31 @@ import { Ionicons } from '@expo/vector-icons';
 
 export default function TabLayout() {
   return (
-    <Tabs screenOptions={{ tabBarActiveTintColor: '#2e7d32' }}>
+    <Tabs
+      screenOptions={{
+        tabBarActiveTintColor: '#FF7043', // Warna aksen saat tab dipilih (Jingga Terakota)
+        tabBarInactiveTintColor: '#9CA3AF', // Warna saat tab tidak aktif (Abu-abu)
+        tabBarStyle: {
+          backgroundColor: '#1A1A1A', // Warna latar belakang tab bar (Mode Gelap Arang)
+          borderTopColor: '#333333',
+          height: 60,
+          paddingBottom: 8,
+          paddingTop: 6,
+        },
+        headerStyle: {
+          backgroundColor: '#1A1A1A',
+        },
+        headerTintColor: '#F3F4F6',
+        headerTitleStyle: {
+          fontWeight: 'bold',
+        },
+      }}
+    >
       <Tabs.Screen
         name="index"
         options={{
-          title: 'Dashboard',
+          title: 'Home',
+          headerShown: false, // Disembunyikan karena Dashboard sudah punya header sendiri
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="home-outline" size={size} color={color} />
           ),
@@ -17,8 +37,9 @@ export default function TabLayout() {
         name="scan"
         options={{
           title: 'Scan Struk',
+          headerShown: false,
           tabBarIcon: ({ color, size }) => (
-            <Ionicons name="camera-outline" size={size} color={color} />
+            <Ionicons name="scan-circle-outline" size={size} color={color} />
           ),
         }}
       />
@@ -26,13 +47,12 @@ export default function TabLayout() {
         name="analytics"
         options={{
           title: 'Analitik',
+          headerShown: false,
           tabBarIcon: ({ color, size }) => (
-            <Ionicons name="stats-chart-outline" size={size} color={color} />
+            <Ionicons name="bar-chart-outline" size={size} color={color} />
           ),
         }}
       />
-      {/* Sisa template Expo: disembunyikan dari tab bar */}
-      <Tabs.Screen name="two" options={{ href: null }} />
     </Tabs>
   );
 }
