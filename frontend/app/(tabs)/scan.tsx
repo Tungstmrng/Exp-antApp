@@ -5,9 +5,10 @@ import * as ImagePicker from 'expo-image-picker';
 import { useFinance } from '../../context/FinanceContext';
 import { CATEGORIES, DEFAULT_CATEGORY } from '../../constants/Categories';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import * as FileSystem from 'expo-file-system/legacy';
 
 // Atur lewat file frontend/.env (lihat .env.example)
-const BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL || 'http://192.168.110.12:5000';
+const BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL || 'http://10.0.2.2:5000';
 
 interface EditableItem {
   key: string;
@@ -98,19 +99,17 @@ export default function ScanScreen() {
     setParticipants(['Saya']);
 
     try {
-      const fetchResponse = await fetch(uri);
-      const blob = await fetchResponse.blob();
-      const filename = uri.split('/').pop() || 'receipt.jpg';
-
-      const formData = new FormData();
-      formData.append('receipt', blob as any, filename);
-
-      const response = await fetch(`${BACKEND_URL}/api/scan`, {
-        method: 'POST',
-        body: formData,
+      const uploadResult = await FileSystem.uploadAsync(`${BACKEND_URL}/api/scan`, uri, {
+        fieldName: 'receipt', // Harus sama dengan nama field di multer backend ('receipt')
+        httpMethod: 'POST',
+        uploadType: 1, // 1 adalah kode numerik native untuk FileSystemUploadType.MULTIPART
       });
 
-      const json = await response.json();
+      if (uploadResult.status !== 200) {
+        throw new Error(`Server merespons dengan status ${uploadResult.status}`);
+      }
+
+      const json = JSON.parse(uploadResult.body);
 
       if (json.success) {
         const data = json.data;
@@ -144,7 +143,7 @@ export default function ScanScreen() {
       }
     } catch (error) {
       console.error('Error uploading receipt:', error);
-      Alert.alert('Koneksi Gagal', `Pastikan backend menyala dan bisa diakses di ${BACKEND_URL}.`);
+      Alert.alert('Koneksi Gagal', `Pastikan backend menyala di port 5000 dan gunakan IP http://10.0.2.2:5000`);
     } finally {
       setIsLoading(false);
     }
