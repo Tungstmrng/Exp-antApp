@@ -86,7 +86,8 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const loadTransactionsFromDB = async () => {
     try {
       const txRows: any[] = await db.getAllAsync('SELECT * FROM transactions ORDER BY date DESC;');
-      
+      console.log('📥 [SQLITE LOAD] Berhasil membaca data transaksi dari database. Jumlah data:', txRows.length);
+      console.log('📋 Isi data transaksi:', txRows);
       const loadedTransactions: Transaction[] = [];
 
       for (const tx of txRows) {
@@ -148,6 +149,7 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
       }
 
       // Perbarui state lokal
+      console.log('✅ [SQLITE SUCCESS] Transaksi baru berhasil disimpan:', newTransaction.merchant_name, 'Total:', newTransaction.total_amount);
       setTransactions((prev) => [newTransaction, ...prev]);
     } catch (error) {
       console.error('Gagal menyimpan transaksi ke SQLite:', error);
